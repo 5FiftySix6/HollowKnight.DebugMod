@@ -3,9 +3,9 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using DebugMod.Hitbox;
 using UnityEngine;
 using UnityEngine.UI;
-using DebugMod.Hitbox;
 
 namespace DebugMod
 {
@@ -17,6 +17,7 @@ namespace DebugMod
         public Dictionary<string, Texture2D> images = new Dictionary<string, Texture2D>();
         public Vector3 hazardLocation;
         public string respawnSceneWatch;
+        public static bool didInput, inputEsc;
         private static readonly HitboxViewer hitboxes = new();
 
         public GameObject canvas;
@@ -39,6 +40,8 @@ namespace DebugMod
             scaler.referenceResolution = new Vector2(1920f, 1080f);
             canvas.AddComponent<GraphicRaycaster>();
 
+            MinimalInfoPanel.BuildMenu(canvas);
+            SaveStatesPanel.BuildMenu(canvas);
             InfoPanel.BuildMenu(canvas);
             TopMenu.BuildMenu(canvas);
             EnemiesPanel.BuildMenu(canvas);
@@ -84,6 +87,7 @@ namespace DebugMod
 
             foreach (string res in resourceNames)
             {
+                //DebugMod.instance.Log(res + "\n\n");
                 if (res.StartsWith("DebugMod.Images."))
                 {
                     try
@@ -113,14 +117,15 @@ namespace DebugMod
         {
             if (DebugMod.GM == null) return;
             
-            InfoPanel.Update();
+            SaveStatesPanel.Update();
             TopMenu.Update();
             EnemiesPanel.Update();
             Console.Update();
             KeyBindPanel.Update();
-
+            MinimalInfoPanel.Update();
+            InfoPanel.Update();
             if (DebugMod.GetSceneName() == "Menu_Title") return;
-            
+
             //Handle keybinds
             foreach (KeyValuePair<string, int> bind in DebugMod.settings.binds)
             {
@@ -202,10 +207,40 @@ namespace DebugMod
                     DebugMod.settings.binds.Remove(bind.Key);
                 }
             }
+            if (SaveStateManager.inSelectSlotState && DebugMod.settings.SaveStatePanelVisible)
+            {
+                foreach (KeyValuePair<KeyCode, int> entry in DebugMod.alphaKeyDict)
+                {
+                    
+                    if (Input.GetKeyDown(entry.Key))
+                    {
+                        if (DebugMod.alphaKeyDict.TryGetValue(entry.Key, out int keyInt))
+                        {
+                            // keyInt should be between 0-9
+                            SaveStateManager.currentStateSlot = keyInt;
+                            didInput = true;
+                            break;
+                        }
+                        else
+                        {
+                            didInput = inputEsc = true;
+                            break;
+                        }
+                    }
+                }
+            }
 
             if (DebugMod.infiniteSoul && PlayerData.instance.MPCharge < PlayerData.instance.maxMP && PlayerData.instance.health > 0 && !HeroController.instance.cState.dead && GameManager.instance.IsGameplayScene())
             {
-                PlayerData.instance.MPCharge = PlayerData.instance.maxMP;
+                PlayerData.instance.MPCharge = PlayerData.instance.maxMP - 1;
+                if (PlayerData.instance.MPReserveMax > 0)
+                {
+                    PlayerData.instance.MPReserve = PlayerData.instance.MPReserveMax - 1;
+                    HeroController.instance.TakeReserveMP(1);
+                    HeroController.instance.AddMPChargeSpa(2);
+                }
+                //HeroController.instance.TakeReserveMP(1);
+                HeroController.instance.AddMPChargeSpa(1);
             }
 
             if (DebugMod.playerInvincible && PlayerData.instance != null)
@@ -244,6 +279,11 @@ namespace DebugMod
                     DebugMod.noclipPos = DebugMod.RefKnight.transform.position;
                 }
             }
+
+            /*if (DebugMod.IH.inputActions.pause.WasPressed && DebugMod.GM.IsGamePaused())
+            {
+                UIManager.instance.TogglePauseGame();
+            }*/
 
             if (DebugMod.cameraFollow)
             {
@@ -298,7 +338,7 @@ namespace DebugMod
             {
                 if (_instance == null)
                 {
-                    _instance = FindObjectOfType<GUIController>();
+                    _instance = UnityEngine.Object.FindObjectOfType<GUIController>();
                     if (_instance == null)
                     {
                         DebugMod.instance.LogWarn("[DEBUG MOD] Couldn't find GUIController");
